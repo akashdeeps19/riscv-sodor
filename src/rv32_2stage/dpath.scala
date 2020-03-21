@@ -16,6 +16,20 @@ import Constants._
 import Common._
 import Common.Constants._
 
+// class myCounter extends Counter{
+
+//   object counter{
+//     var count = 10
+//   }
+
+//   val total = counter
+//   def increment () = {super.inc(); total.count+=1}
+// //   def decrement () = {super.decrement(); total.count-=1;}
+//   def get() : UInt = UInt(total.count)
+// }
+
+
+
 class DatToCtlIo(implicit val conf: SodorConfiguration) extends Bundle()
 {
    val inst  = Output(UInt(32.W))
@@ -160,12 +174,24 @@ class DatPath(implicit val conf: SodorConfiguration) extends Module
 
    val alu_shamt = exe_alu_op2(4,0).asUInt()
 
+   val int_counter = new Counter(Int.MaxValue)
+
    exe_alu_out := MuxCase(0.U, Array(
-                  (io.ctl.alu_fun === ALU_ADD)  -> (exe_alu_op1 + exe_alu_op2).asUInt(),
-                  (io.ctl.alu_fun === ALU_SUB)  -> (exe_alu_op1 - exe_alu_op2).asUInt(),
-                  (io.ctl.alu_fun === ALU_AND)  -> (exe_alu_op1 & exe_alu_op2).asUInt(),
-                  (io.ctl.alu_fun === ALU_OR)   -> (exe_alu_op1 | exe_alu_op2).asUInt(),
-                  (io.ctl.alu_fun === ALU_XOR)  -> (exe_alu_op1 ^ exe_alu_op2).asUInt(),
+                  (io.ctl.alu_fun === ALU_ADD)  -> {(exe_alu_op1 + exe_alu_op2).asUInt();
+                                                      int_counter.inc()
+                                                   },
+                  (io.ctl.alu_fun === ALU_SUB)  -> {(exe_alu_op1 - exe_alu_op2).asUInt();
+                                                      int_counter.inc()
+                                                   },
+                  (io.ctl.alu_fun === ALU_AND)  -> {(exe_alu_op1 & exe_alu_op2).asUInt();
+                                                      int_counter.inc()
+                                                   },
+                  (io.ctl.alu_fun === ALU_OR)   -> {(exe_alu_op1 | exe_alu_op2).asUInt();
+                                                      int_counter.inc()
+                                                   },
+                  (io.ctl.alu_fun === ALU_XOR)  -> {(exe_alu_op1 ^ exe_alu_op2).asUInt();
+                                                      int_counter.inc()
+                                                   },
                   (io.ctl.alu_fun === ALU_SLT)  -> (exe_alu_op1.asSInt() < exe_alu_op2.asSInt()).asUInt(),
                   (io.ctl.alu_fun === ALU_SLTU) -> (exe_alu_op1 < exe_alu_op2).asUInt(),
                   (io.ctl.alu_fun === ALU_SLL)  -> ((exe_alu_op1 << alu_shamt)(conf.xprlen-1, 0)).asUInt(),
@@ -173,6 +199,10 @@ class DatPath(implicit val conf: SodorConfiguration) extends Module
                   (io.ctl.alu_fun === ALU_SRL)  -> (exe_alu_op1 >> alu_shamt).asUInt(),
                   (io.ctl.alu_fun === ALU_COPY1)-> exe_alu_op1
                   ))
+
+   // when(exe_alu_out !== 0){
+   //    int_counter.inc()
+   // }
 
    // Branch/Jump Target Calculation
    exe_br_target       := exe_reg_pc + imm_b_sext
@@ -197,6 +227,10 @@ class DatPath(implicit val conf: SodorConfiguration) extends Module
 
    // Add your own uarch counters here!
    csr.io.counters.foreach(_.inc := false.B)
+   // val countOn = true.B // increment counter every clock cycle
+   // val (counterValue, counterWrap) = Counter(countOn, 4)
+   
+   
 
 
    // WB Mux
@@ -221,7 +255,7 @@ class DatPath(implicit val conf: SodorConfiguration) extends Module
 
 
    // Printout
-   printf("Cyc= %d [%d] pc=[%x] W[r%d=%x][%d] Op1=[r%d][%x] Op2=[r%d][%x] inst=[%x] %c%c%c DASM(%x)\n",
+   printf("Cyc= %d [%d] pc=[%x] W[r%d=%x][%d] Op1=[r%d][%x] Op2=[r%d][%x] inst=[%x] %c%c%c DASM(%x) IntCount=%d\n",
       csr.io.time(31,0),
       csr.io.retire,
       exe_reg_pc,
@@ -243,7 +277,9 @@ class DatPath(implicit val conf: SodorConfiguration) extends Module
          PC_EXC -> Str("E"),
          PC_4 -> Str(" "))),
       Mux(csr.io.exception, Str("X"), Str(" ")),
-      exe_reg_inst)
+      exe_reg_inst,
+      // exe_alu_out)
+      int_counter.value)
 
 }
 
